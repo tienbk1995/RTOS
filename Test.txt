@@ -1,3 +1,4 @@
 Test git rules
 Fix some rules
 New branch
+This is branch B

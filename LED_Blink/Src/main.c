@@ -7,12 +7,13 @@
 
 /* Used as a loop counter to create a very crude delay. */
 #define mainDELAY_LOOP_COUNT		( 0xfffff )
-
+#define TASKSAME 1
 /* The task functions prototype*/
 void vTask1( void *pvParameters );
 void vTask2( void *pvParameters );
-
-
+void vTaskFunc( void *pvParameters );
+TaskHandle_t xTask1Handle = NULL;
+TaskHandle_t xTask2Handle = NULL;
 /*-----------------------------------------------------------*/
 
 int main( void )
@@ -26,24 +27,28 @@ int main( void )
   	SystemCoreClockUpdate();
 	
 	/* Initialize the serial I/O(console ), This function configures Due's CONSOLE_UART */
-	
+	const char * firstpara = "This is task 1\r\n";
+	const char * secondpara = "This is task 2\r\n";
+
 	
 	printf("FreeRTOS running on STM32F407 Discovery Board\n");
-
+#if (TASKSAME == 1)
 	/* Create one of the two tasks. */
 	xTaskCreate(	vTask1,		/* Pointer to the function that implements the task. */
 					"Task 1",	/* Text name for the task.  This is to facilitate debugging only. */
 					240,		/* Stack depth in words. */
 					NULL,		/* We are not using the task parameter. */
-					1,			/* This task will run at priority 1. */
-					NULL );		/* We are not using the task handle. */
+					2,			/* This task will run at priority 1. */
+					&xTask1Handle);		/* We are not using the task handle. */
 
 	/* Create the other task in exactly the same way. */
-	xTaskCreate( vTask2, "Task 2", 240, NULL, 1, NULL );
-	
+	xTaskCreate( vTask2, "Task 1", 240, NULL, 1, &xTask2Handle);
+#else
+	xTaskCreate( vTaskFunc, "Task 1", 240, (void*) firstpara, 1, NULL );
+	xTaskCreate( vTaskFunc, "Task 2", 240, (void*) secondpara, 2, NULL );
+#endif
 	/* Start the scheduler so our tasks start executing. */
 	vTaskStartScheduler();
-
 	/* If all is well we will never reach here as the scheduler will now be
 	running.  If we do reach here then it is likely that there was insufficient
 	heap available for the idle task to be created. */
@@ -53,49 +58,56 @@ int main( void )
 
 void vTask1( void *pvParameters )
 {
-const char *pcTaskName = "Task 1 is running\n";
-volatile unsigned long ul;
-
+	const char *pcTaskName = "Task 1 is running\n";
+	volatile unsigned long ul;
+	UBaseType_t ulGetPriorityTsk1 = uxTaskPriorityGet(NULL);
+	UBaseType_t ulGetPriorityTsk2 = uxTaskPriorityGet(xTask2Handle);
 	/* As per most tasks, this task is implemented in an infinite loop. */
 	for( ;; )
 	{
 		/* Print out the name of this task. */
-    printf("%s\n",pcTaskName);
-
-		/* Delay for a period. */
-		for( ul = 0; ul < mainDELAY_LOOP_COUNT; ul++ )
-		{
-			/* This loop is just a very crude delay implementation.  There is
-			nothing to do in here.  Later exercises will replace this crude
-			loop with a proper delay/sleep function. */
-		}
+    	printf("%s\r\n",pcTaskName);
+		printf("Current priority of task 1 is %d\r\n",ulGetPriorityTsk1);
+		printf("Current priority of task 2 is %d\r\n",ulGetPriorityTsk2);
+		ul = 0; // Reset counter since task is continuing at that point
+		while(ul < mainDELAY_LOOP_COUNT) ul++;// Loop doing nothing other than delaying
+		vTaskPrioritySet(xTask2Handle, ulGetPriorityTsk1 + 1); // Prioritize task 2
 	}
-} 
+}
 /*-----------------------------------------------------------*/
 
 void vTask2( void *pvParameters )
 {
-const char *pcTaskName = "Task 2 is running\n";
-volatile unsigned long ul;
-
-	/* As per most tasks, this task is implemented in an infinite loop. */
+	const char *pcTaskName = "Task 2 is running\n";
+	volatile unsigned long ul;
+	UBaseType_t ulGetPriorityTsk1 = uxTaskPriorityGet(xTask1Handle);
+	UBaseType_t ulGetPriorityTsk2 = uxTaskPriorityGet(NULL);	/* As per most tasks, this task is implemented in an infinite loop. */
 	for( ;; )
 	{
 		/* Print out the name of this task. */
-
-    printf("%s\n",pcTaskName);
-
-		
-
-	for( ul = 0; ul < mainDELAY_LOOP_COUNT; ul++ )
-		{
-			/* This loop is just a very crude delay implementation.  There is
-			nothing to do in here.  Later exercises will replace this crude
-			loop with a proper delay/sleep function. */
-		}
+		printf("%s\n",pcTaskName);
+		printf("Current priority of task 1 is %d\r\n",ulGetPriorityTsk1);
+		printf("Current priority of task 2 is %d\r\n",ulGetPriorityTsk2);
+		ul = 0;
+		while(ul < mainDELAY_LOOP_COUNT) ul++; // Loop doing nothing other than delaying
+		/* for( ul = 0; ul < mainDELAY_LOOP_COUNT; ul++ ) */
+		vTaskPrioritySet(xTask2Handle, ulGetPriorityTsk1 - 1); // Prioritize task 1
 	}
 }
 /*-----------------------------------------------------------*/
+		
+void vTaskFunc( void *pvParameters )
+{
+	volatile unsigned long count = 0;
+	while(1)
+	{
+		printf("%s",pvParameters);
+		//while(++count < mainDELAY_LOOP_COUNT); // Brutal loop to delay the task, CPU consumes time for this task.
+		vTaskDelay(pdMS_TO_TICKS(2000)); // Pushing task into "Blocked State", CPU is free for other tasks.
+	}
+}
+/*-----------------------------------------------------------*/
+
 
 void vApplicationMallocFailedHook( void )
 {
